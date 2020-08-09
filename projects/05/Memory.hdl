@@ -27,5 +27,32 @@ CHIP Memory {
     OUT out[16];
 
     PARTS:
-    // Put your code here:
+       // select output pin based on the address
+       //     0 - 000 0000 0000 0000 - address[14..15] = 00
+       // 16383 - 011 1111 1111 1111 - address[14..15] = 01
+       // 16384 - 100 0000 0000 0000 - address[14..15] = 10
+       // 24575 - 101 1111 1111 1111 - address[14..15] = 10
+       // 24576 - 110 0000 0000 0000 - address[14..15] = 11
+       // 24577 - 110 0000 0000 0001 - address[14..15] = 11
+
+       // address[13..14] == 00 or 01 => RAM
+       // address[13..14] == 10 => screen
+       // address[13..14] == 11 => keyboard or invalid
+
+        // need to determine which part get the load == 1
+        DMux4Way(in=load, sel=address[13..14], a=loadRAM1, b=loadRAM2, c=loadScreen, d=loadKeyboard);
+       
+        Or(a=loadRAM1, b=loadRAM2, out=loadRAM);
+
+        // RAM16k address 14 bits
+        RAM16K(in=in, load=loadRAM, address=address[0..13], out=ramOut);
+        
+        // screen address 13 bits
+        Screen(in=in, load=loadScreen, address=address[0..12], out=screenOut);
+       
+        Keyboard(out=keyboardOut);
+
+        // select output based on address[13..14]
+        Mux4Way16(a=ramOut, b=ramOut, c=screenOut, d=keyboardOut, sel=address[13..14], out=out);
+
 }

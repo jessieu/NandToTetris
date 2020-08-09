@@ -39,5 +39,64 @@ CHIP CPU {
         pc[15];          // address of next instruction
 
     PARTS:
-    // Put your code here:
+        // decode control bits from instruction
+        // A instruction - most significant bit is 0
+        Not(in=instruction[15], out=isA);
+        // C instruction - most significant bit is 1
+        And(a=true, b=instruction[15], out=isC);
+
+        // load from data or address
+        And(a=instruction[12], b=true, out=loadFromAddr);
+
+        // ALU input bits setting
+        Mux(a=false, b=instruction[11], sel=isC, out=zx);
+        Mux(a=false, b=instruction[10], sel=isC, out=nx);
+        Mux(a=false, b=instruction[9], sel=isC, out=zy);
+        Mux(a=false, b=instruction[8], sel=isC, out=ny);
+        Mux(a=false, b=instruction[7], sel=isC, out=f);
+        Mux(a=false, b=instruction[6], sel=isC, out=no);
+
+        // Destination output setting
+        And(a=isC, b=instruction[5], out=storeInA);
+        And(a=isC, b=instruction[4], out=storeInD);
+        And(a=isC, b=instruction[3], out=writeM);
+
+        // if it's A instruction or storeInA is true, stores the value in the A-register
+        Mux16(a=aluOut, b=instruction, sel=isA, out=firstMuxOut);
+        Or(a=isA, b=storeInA, out=loadA);
+        ARegister (in=firstMuxOut, load=loadA, out=aRegOut, out[0..14]=addressM);
+
+        Mux16(a=aRegOut, b=inM, sel=loadFromAddr, out=secondMuxOut);
+
+        // if the storeInD is true, store the value in the D-register
+        DRegister (in=aluOut, load=storeInD, out=dRegOut);
+        ALU(x=dRegOut, y=secondMuxOut, zx=zx, nx=nx, zy=zy, ny=ny, f=f, no=no, out=aluOut, zr=zr, ng=ng);
+
+        Mux16(a=false, b=aluOut, sel=true, out=outM);
+
+        // determine jump or not based on the output zr, ng and jump instruction
+        // jump bits setting
+        // 0  0  0         no jump
+        // 0  0  1   JGT   jump if pos
+        // 0  1  0   JEQ   jump if zr
+        // 0  1  1   JGE   jump if zr or pos
+        // 1  0  0   JLT   jump if ng
+        // 1  0  1   JNE   jump if ng or pos
+        // 1  1  0   JLE   jump if ng or zr
+        // 1  1  1   JMP   jump if ng or zr or pos
+
+        Not(in=true, out=nojmp);
+        And(a=zr, b=true, out=jeq);
+        And(a=ng, b=true, out=jlt);
+        Or(a=ng, b=zr, out=jle);
+        Not(in=jle, out=jgt);
+        Or(a=zr, b=jgt, out=jge);
+        Or(a=ng, b=jgt, out=jne);
+        Or(a=jeq, b=jne, out=jmp);
+
+        Mux8Way(a=nojmp, b=jgt, c=jeq, d=jge, e=jlt, f=jne, g=jle, h=jmp, j0=instruction[0], j1=instruction[1], j2=instruction[2], out=mayJump);
+        And(a=mayJump, b=isC, out=shouldJump);
+        // program counter 
+        PC(in=aRegOut, load=shouldJump, inc=true, reset=reset, out[0..14]=pc);
+        
 }
